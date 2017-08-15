@@ -1,0 +1,170 @@
+swagger: '2.0'
+info:
+  version: '1.0'
+  title: Abacus Collector API description
+  description: |
+   # Overview
+  
+   The Abacus Usage Metering and Aggregation REST API can be used by Cloud resource providers to submit usage data, usage dashboards to retrieve real time usage reports, and billing systems to retrieve the aggregated and rated usage data needed for billing. Cloud resources include services and application runtimes or containers for example.
+   
+   Usage data is exchanged with Abacus in the form of usage documents. Each document type has a JSON representation and one or more REST methods.
+   
+   # Resource Usage
+   
+   The _resource usage collection_ API can be used by Cloud resource providers to submit usage for instances of Cloud resources, including service instances and application runtimes or containers.
+
+    Usage can be submitted by POSTing _resource usage_ documents to Abacus.
+    
+    A _resource usage document_ contains usage measurements for a Cloud resource.
+    
+    Once a _resource usage_ document has been submitted to Abacus it can be retrieved using GET.
+
+host: abacus-usage-collector.<your_landscape_domain>.com
+basePath: /v1
+schemes:
+- https
+produces:
+- application/json
+consumes:
+- application/json
+security:
+  - systemToken:
+    - abacus.usage.read
+    - abacus.usage.write
+paths:
+  /metering/collected/usage:
+    post:
+      summary: Records the resource usage document and processes the Cloud resource usage data it contains.
+      description: |
+        This is an endpoint for submitting usage to the Abacus Pipeline.
+        For more details refer to the [Submitting usage wiki](https://github.com/cloudfoundry-incubator/cf-abacus/wiki/Submitting-Usage).
+      parameters:
+        - $ref: '#/parameters/usageBody'
+      tags:
+        - usage
+      # Do we need 400 and 500?  
+      responses:
+        201:
+          description: Indicates successful create with the URL of the resource usage document in a Location header.
+        400:
+          description: Indicates an Invalid Request.
+        403:
+          description: Insufficient scope error, encountered when the resource_id value is invalid.
+        404:
+          description: A value in one of the ID fields is invalid or is missing.
+        409:
+          description: The submitted usage document has a timestamp older than the slack window or the submitted usage is duplicate (where all the IDs are the same, and metric may or may not be the same) with that of an already accepted document.
+        500:
+          description: Indicates Internal Server Error.
+  /metering/collected/usage/{usage_document_id}:
+    get:
+      summary: Retrieves a previously submitted resource usage document.
+      description: |
+        This is an endpoint for getiing collected usage from the Abacus Pipeline.
+      parameters:
+        - $ref: '#/parameters/usage_document_id'
+        - $ref: '#/parameters/usageBody'
+      tags:
+        - usage
+      # Do we need 400 and 500?  
+      responses:
+        200:
+          description: Indicates success with the requested resource usage document.
+        400:
+          description: Indicates an Invalid Request.
+        404:
+          description: A document with the Usage Document ID is invalid or is missing.
+        500:
+          description: Indicates Internal Server Error.
+
+parameters:
+  usageBody:
+    name: usage
+    in: body
+    required: true
+    description: JSON object based on the Usage model bellow.
+    schema:
+      $ref: '#/definitions/Usage'
+
+  planId:
+    name: plan_id
+    in: path
+    required: true
+    type: string
+    description: Resource provider plan identifier.
+    
+  usage_document_id:
+    name: usage_document_id
+    in: path
+    required: true
+    type: string
+    description: Resource provider plan identifier.
+    
+  cacheControl:
+    name: Cache-Control
+    in: header
+    required: false
+    type: string
+    description: Used to specify if the backend should use caching on the required data. Pass 'no-cache' in case you do not want caching on the backend.
+
+definitions:
+  Usage:
+    description: The metering plan defines the metering part of the calculations that Abacus will execute.
+    # TODO required: ?
+    properties:
+      start:
+        description: "Start"
+        type: integer
+        format: utc-millisec
+      end:
+        description: "End"
+        type: integer
+        format: utc-millisec
+      region:
+        description: Region
+        type: string
+      organization_id:
+        description: Organization ID
+        type: string
+      space_id:
+        description: Space ID
+        type: string
+      consumer_id:
+        description: Space ID
+        type: string      
+      resource_id:
+        description: Resource ID
+        type: string      
+      plan_id:
+        description: Plan ID
+        type: string
+      resource_instance_id:
+        description: Resource Instance ID
+        type: string
+      measured_usage:
+        type: array
+        items:
+          $ref: '#/definitions/Measure'
+  
+  Measure:
+   description: Measures are the raw data that you submit to Abacus. Each measure consists of multiple entries, each of them associated with a name and unit.
+   properties:
+    measure:
+     description: The name of the measure. For example `storage`, `heavy_api_calls` or `light_api_calls`.
+     type: string
+    quantity:
+     description: The quantity of the measure.
+     type: integer
+  
+securityDefinitions:
+  systemToken:
+    description: |
+      The system token has scopes abacus.usage.read and abacus.usage.write.
+      For more details [System Token](https://github.com/cloudfoundry-incubator/cf-abacus/blob/master/doc/security.md#system-token).
+    type: oauth2
+    scopes:
+      abacus.usage.read: Grants read access
+      abacus.usage.write: Grants write access
+    flow: accessCode
+    authorizationUrl: https://login.cf.<your_landscape_domain>.com
+    tokenUrl: https://uaa.cf.<your_landscape_domain>.com
